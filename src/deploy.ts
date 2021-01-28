@@ -158,3 +158,98 @@ export async function deployProductionSite(
 
   return deploymentResult;
 }
+
+
+async function execWithCredentialsGCR(
+  args: string[],
+  projectId,
+  gacFilename,
+  debug: boolean = false
+) {
+  let deployOutputBuf: Buffer[] = [];
+
+  try {
+    await exec(
+      "gcloud run ",
+      [
+        ...args,
+        ...(projectId ? ["--project", projectId] : []),
+        debug
+          ? "--debug" // gives a more thorough error message
+          : "--json", // allows us to easily parse the output
+      ],
+      {
+        listeners: {
+          stdout(data: Buffer) {
+            deployOutputBuf.push(data);
+          },
+        },
+        env: {
+          ...process.env,
+          GOOGLE_APPLICATION_CREDENTIALS: gacFilename, // the CLI will automatically authenticate with this env variable set
+        },
+      }
+    );
+  } catch (e) {
+    console.log(Buffer.concat(deployOutputBuf).toString("utf-8"));
+    console.log(e.message);
+
+    if (debug === false) {
+      console.log(
+        "Retrying deploy with the --debug flag for better error output"
+      );
+      await execWithCredentialsGCR(args, projectId, gacFilename, true);
+    } else {
+      throw e;
+    }
+  }
+
+  return deployOutputBuf.length
+    ? deployOutputBuf[deployOutputBuf.length - 1].toString("utf-8")
+    : ""; // output from the CLI
+}
+
+
+export async function deployPreviewGCP(
+  gacFilename: string,
+  deployConfig: DeployConfig
+) {
+  const { projectId, channelId, target, expires } = deployConfig;
+
+  const deploymentText = await execWithCredentials(
+    [
+      "hosting:channel:deploy",
+      channelId,
+      ...(target ? ["--only", target] : []),
+      ...(expires ? ["--expires", expires] : []),
+    ],
+    projectId,
+    gacFilename
+  );
+
+  const deploymentResult = JSON.parse(deploymentText.trim()) as
+    | ChannelSuccessResult
+    | ErrorResult;
+
+  return deploymentResult;
+}
+
+
+export async function deployProductionSiteGCP(
+  gacFilename,
+  productionDeployConfig: ProductionDeployConfig
+) {
+  const { projectId, target } = productionDeployConfig;
+
+  const deploymentText = await execWithCredentials(
+    ["deploy", "--only", `hosting${target ? ":" + target : ""}`],
+    projectId,
+    gacFilename
+  );
+
+  const deploymentResult = JSON.parse(deploymentText) as
+    | ProductionSuccessResult
+    | ErrorResult;
+
+  return deploymentResult;
+}
