@@ -160,7 +160,7 @@ export async function deployProductionSite(
 }
 
 
-async function execWithCredentialsGCR(
+async function execWithCredentialsGCP(
   args: string[],
   projectId,
   gacFilename,
@@ -175,8 +175,7 @@ async function execWithCredentialsGCR(
         ...args,
         ...(projectId ? ["--project", projectId] : []),
         debug
-          ? "--debug" // gives a more thorough error message
-          : "--json", // allows us to easily parse the output
+          ? "--verbosity", // gives a more thorough error message
       ],
       {
         listeners: {
@@ -196,9 +195,9 @@ async function execWithCredentialsGCR(
 
     if (debug === false) {
       console.log(
-        "Retrying deploy with the --debug flag for better error output"
+        "Retrying deploy with the --verbosity flag for better error output"
       );
-      await execWithCredentialsGCR(args, projectId, gacFilename, true);
+      await execWithCredentialsGCP(args, projectId, gacFilename, true);
     } else {
       throw e;
     }
@@ -214,14 +213,12 @@ export async function deployPreviewGCP(
   gacFilename: string,
   deployConfig: DeployConfig
 ) {
-  const { projectId, channelId, target, expires } = deployConfig;
+  const { projectId, channelId } = deployConfig;
 
-  const deploymentText = await execWithCredentials(
+  const deploymentText = await execWithCredentialsGCP(
     [
-      "hosting:channel:deploy",
+      "deploy",
       channelId,
-      ...(target ? ["--only", target] : []),
-      ...(expires ? ["--expires", expires] : []),
     ],
     projectId,
     gacFilename
@@ -241,8 +238,8 @@ export async function deployProductionSiteGCP(
 ) {
   const { projectId, target } = productionDeployConfig;
 
-  const deploymentText = await execWithCredentials(
-    ["deploy", "--only", `hosting${target ? ":" + target : ""}`],
+  const deploymentText = await execWithCredentialsGCP(
+    ["deploy", `hosting${target ? ":" + target : ""}`],
     projectId,
     gacFilename
   );
